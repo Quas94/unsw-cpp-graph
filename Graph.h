@@ -29,7 +29,54 @@ namespace cs6771 {
 	class Graph {
 	public:
 		// default constructor
-		Graph();
+		Graph() {
+			// does nothing
+		}
+		// big five
+		// copy constructor
+		Graph(const Graph& from) {
+			// deep copy every node and edge within those nodes
+			for (auto i = from.nodes.begin(); i != from.nodes.end(); ++i) {
+				// on this pass, edges aren't copied yet
+				std::shared_ptr<GraphNode> newNode(new GraphNode(**i));
+				nodes.push_back(newNode);
+			}
+			// now that all nodes are copied, we can handle the edges
+			for (unsigned int i = 0; i < from.nodes.size(); ++i) {
+				// for every edge in original, copy it
+				for (unsigned int j = 0; j < from.nodes[i]->edges.size(); ++j) {
+					std::shared_ptr<GraphEdge> newEdge(new GraphEdge()); // create new graph edge
+					auto oldEdge = from.nodes[i]->edges[j];
+					newEdge->weight = oldEdge->weight; // copy over weight value
+					if (auto sptrOldEdgeDest = oldEdge->destNode.lock()) {
+						const N& oldEdgeDestValue = sptrOldEdgeDest->value;
+						auto correspNode = getNode(oldEdgeDestValue); // find the same node in this new graph
+						newEdge->destNode = correspNode; // assign it to the new edge
+						nodes[i]->edges.push_back(newEdge); // add to edges
+					}
+					// otherwise don't add, let the newEdge self-destruct at end of this scope
+				}
+			}
+		}
+		/*
+		// move constructor
+		Graph(Graph&& from) {
+
+		}
+		// copy assignment
+		Graph& operator=(const Graph& from) {
+
+		}
+		// move assignment
+		Graph& operator=(Graph&& from) {
+
+		}
+		// destructor
+		~Graph() {
+
+		}
+		*/
+
 		// add a new node to the graph, returns true if node is added, and false if it already exists
 		bool addNode(const N& n);
 		// add a new edge to the given node, returns true if added, false if it already exists
@@ -61,19 +108,35 @@ namespace cs6771 {
 	private:
 		// GraphEdge prototype
 		class GraphEdge;
+		// GraphNode prototype
+		class GraphNode;
+
+		// collection of smart pointers corresponding to the Nodes in this graph
+		std::vector<std::shared_ptr<GraphNode>> nodes;
 
 		// @TODO figure out where to use smart pointers in the nested classes (and other places?)
-		// nested class Node: contains a list of edges, and the node value itself
+		// inner class Node: contains a list of edges, and the node value itself
 		class GraphNode {
 		public:
 			// these should be okay with compiler-auto-generated constructors and destructor
 			std::vector<std::shared_ptr<GraphEdge>> edges;
 			N value;
 
+			// default constructor
+			GraphNode() {
+				// does nothing
+			}
+
+			// copy constructor for GraphNode inner class
+			GraphNode(const GraphNode& from) {
+				value = from.value; // copy value field
+				// do NOT copy edges in here, will be handled in the Graph copy constructor after
+				// all nodes have been copied
+			}
+
 			void destroyExpiredEdges() {
 				auto i = edges.begin();
 				while (i != edges.end()) {
-					// std::cout << typeid(*i).name() << std::endl;
 					if (!((*i)->destNode.lock())) { // weak_ptr expired
 						edges.erase(i);
 					} else {
@@ -174,10 +237,6 @@ namespace cs6771 {
 			std::weak_ptr<GraphNode> destNode;
 		};
 
-		// collection of smart pointers corresponding to the Nodes in this graph
-		// @TODO: figure out if these should be unique_ptr or shared_ptr!
-		std::vector<std::shared_ptr<GraphNode>> nodes;
-
 		// sort Nodes into correct order
 		// @TODO: implement mutable sort flag to prevent unnecessary sorting
 		void sortNodes() {
@@ -193,7 +252,7 @@ namespace cs6771 {
 		}
 
 		// gets the GraphNode with the given value
-		std::shared_ptr<GraphNode> getNode(const N& n) {
+		std::shared_ptr<GraphNode> getNode(const N& n) const {
 			for (auto i = nodes.begin(); i != nodes.end(); ++i) {
 				if (equals((*i)->value, n)) {
 					return *i;
@@ -203,12 +262,6 @@ namespace cs6771 {
 			throw std::runtime_error("node not found");
 		}
 	};
-
-	// default constructor definition
-	template <typename N, typename E>
-	Graph<N, E>::Graph() {
-		// do nothing as of now
-	}
 
 	// add a new node to the graph
 	template <typename N, typename E>
