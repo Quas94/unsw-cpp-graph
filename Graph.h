@@ -35,6 +35,14 @@ namespace cs6771 {
 		// big five
 		// copy constructor
 		Graph(const Graph& from) {
+			// call the copy assignment directly
+			operator=(from);
+		}
+		// copy assignment
+		Graph& operator=(const Graph& from) {
+			// clear current nodes vector, should cascade down
+			nodes.clear();
+
 			// deep copy every node and edge within those nodes
 			for (auto i = from.nodes.begin(); i != from.nodes.end(); ++i) {
 				// on this pass, edges aren't copied yet
@@ -57,14 +65,13 @@ namespace cs6771 {
 					// otherwise don't add, let the newEdge self-destruct at end of this scope
 				}
 			}
+			return *this;
 		}
+
 		/*
+		// @TODO: move constructor and move assignment
 		// move constructor
 		Graph(Graph&& from) {
-
-		}
-		// copy assignment
-		Graph& operator=(const Graph& from) {
 
 		}
 		// move assignment
