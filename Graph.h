@@ -38,6 +38,7 @@ namespace cs6771 {
 			// call the copy assignment directly
 			operator=(from);
 		}
+
 		// copy assignment
 		Graph& operator=(const Graph& from) {
 			// clear current nodes vector, should cascade down
@@ -68,21 +69,19 @@ namespace cs6771 {
 			return *this;
 		}
 
-		/*
-		// @TODO: move constructor and move assignment
 		// move constructor
-		Graph(Graph&& from) {
-
+		Graph(Graph&& from) : nodes(from.nodes) {
+			// clears 'from' graph's nodes, but the nodes won't be destructed because we just
+			// copied the shared_ptrs into this newly constructed graph
+			from.nodes.clear();
 		}
+
 		// move assignment
 		Graph& operator=(Graph&& from) {
-
+			nodes = from.nodes;
+			from.nodes.clear();
+			return *this;
 		}
-		// destructor
-		~Graph() {
-
-		}
-		*/
 
 		// add a new node to the graph, returns true if node is added, and false if it already exists
 		bool addNode(const N& n);
