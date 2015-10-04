@@ -32,20 +32,31 @@ namespace cs6771 {
 		Graph();
 		// add a new node to the graph, returns true if node is added, and false if it already exists
 		bool addNode(const N& n);
-		// checks if a node already exists
-		bool isNode(const N& n);
-		// prints out all nodes in this graph
-		void printNodes();
-
 		// add a new edge to the given node, returns true if added, false if it already exists
 		bool addEdge(const N& src, const N& dest, const E& weight);
+		// replaces the data stored at the node with the given value
+		bool replace(const N& replace, const N& with);
+		// replaces data stored at node with data stored on another node on the graph
+		// first node param is the node that is destroyed. if either node not found, runtime_error thrown
+		// edges of both nodes retained after merge, except edges between the two nodes themselves
+		// @TODO: double check there are no duplicate edges in the merged node
+		void mergeReplace(const N& destroy, const N& second);
+		// deletes node with given value, as well as all edges connected to and from it
+		void deleteNode(const N& del) noexcept;
+		// deletes an edge between two nodes with a given weight. doesn't throw exceptions
+		void deleteEdge(const N& src, const N& dest, const E& weight) noexcept;
+
+		// checks if a node already exists
+		bool isNode(const N& n);
+		// checks if there is an edge from the first node to the second
+		// if either node is not found, std::runtime_error is thrown
+		bool isConnected(const N& a, const N& b);
+		// prints out all nodes in this graph
+		void printNodes();
 		// prints all edges of the node with the given value, sorted by edge cost incrementing
 		// if edge costs are equivalent, sort by < on dest node's value
 		void printEdges(const N& n);
 
-		// checks if there is an edge from the first node to the second
-		// if either node is not found, std::runtime_error is thrown
-		bool isConnected(const N& a, const N& b);
 
 	private:
 		// GraphEdge prototype
@@ -151,29 +162,6 @@ namespace cs6771 {
 		return false; // already exists so false
 	}
 
-	// checks if a node with the given value already exists
-	template <typename N, typename E>
-	bool Graph<N, E>::isNode(const N& n) {
-		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			if (equals((*i)->value, n)) { // iterator 'i' deferences to a smart pointer
-				return true; // found
-			}
-		}
-		return false; // not found
-	}
-
-	// prints out all nodes in this graph
-	template <typename N, typename E>
-	void Graph<N, E>::printNodes() {
-		// sort first
-		sortNodes();
-		//std::cout << "After sorting:" << std::endl;
-		// then print out values
-		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			std::cout << (*i)->value << std::endl;
-		}
-	}
-
 	// add a new edge to the given node
 	template <typename N, typename E>
 	bool Graph<N, E>::addEdge(const N& src, const N& dest, const E& weight) {
@@ -205,6 +193,69 @@ namespace cs6771 {
 		return true;
 	}
 
+	// replaces data stored at the node with the given value
+	template <typename N, typename E>
+	bool Graph<N, E>::replace(const N& replace, const N& with) {
+		auto sptrReplace = getNode(replace);
+		// getNode will throw runtime_error if node with value 'replace' isn't found
+		if (isNode(with)) {
+			return false; // the 'with' value already exists on this graph, return false
+		}
+		// actually do the replace
+		sptrReplace->value = with;
+		return true;
+	}
+
+	// merges the edges of the two given nodes. first node is destroyed
+	template <typename N, typename E>
+	void Graph<N, E>::mergeReplace(const N& destroy, const N& second) {
+		// @TODO
+	}
+
+	// deletes node with given value, as well as all edges connected to and from it
+	template <typename N, typename E>
+	void Graph<N, E>::deleteNode(const N& del) noexcept {
+		// @TODO
+	}
+
+	// deletes an edge between two nodes with a given weight. doesn't throw exceptions
+	template <typename N, typename E>
+	void Graph<N, E>::deleteEdge(const N& src, const N& dest, const E& weight) noexcept {
+		// @TODO
+	}
+
+	// checks if a node with the given value already exists
+	template <typename N, typename E>
+	bool Graph<N, E>::isNode(const N& n) {
+		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
+			if (equals((*i)->value, n)) { // iterator 'i' deferences to a smart pointer
+				return true; // found
+			}
+		}
+		return false; // not found
+	}
+
+	// checks if there is an edge from the first node to the second
+	template <typename N, typename E>
+	bool Graph<N, E>::isConnected(const N& a, const N& b) {
+		auto sptrNodeA = getNode(a);
+		auto sptrNodeB = getNode(b);
+		// if either a or b don't exist, the getNode() function will throw std::runtime_error
+		return sptrNodeA->hasEdgeTo(b);
+	}
+
+	// prints out all nodes in this graph
+	template <typename N, typename E>
+	void Graph<N, E>::printNodes() {
+		// sort first
+		sortNodes();
+		//std::cout << "After sorting:" << std::endl;
+		// then print out values
+		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
+			std::cout << (*i)->value << std::endl;
+		}
+	}
+
 	// prints all edges of the node with the given value
 	// @TODO test not found runtime_error
 	template <typename N, typename E>
@@ -222,15 +273,6 @@ namespace cs6771 {
 				std::cout << sptr->value << " " << (*i)->weight << std::endl;
 			}
 		}
-	}
-
-	// checks if there is an edge from the first node to the second
-	template <typename N, typename E>
-	bool Graph<N, E>::isConnected(const N& a, const N& b) {
-		auto sptrNodeA = getNode(a);
-		auto sptrNodeB = getNode(b);
-		// if either a or b don't exist, the getNode() function will throw std::runtime_error
-		return sptrNodeA->hasEdgeTo(b);
 	}
 };
 
