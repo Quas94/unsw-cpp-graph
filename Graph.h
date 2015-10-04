@@ -70,9 +70,7 @@ namespace cs6771 {
 			std::vector<std::shared_ptr<GraphEdge>> edges;
 			N value;
 
-			// sorts all the edges in this node into the correct order
-			void sortEdges() {
-				// first, get rid of all edges that have destNode (weak_ptr) expired
+			void destroyExpiredEdges() {
 				auto i = edges.begin();
 				while (i != edges.end()) {
 					// std::cout << typeid(*i).name() << std::endl;
@@ -82,8 +80,11 @@ namespace cs6771 {
 						++i;
 					}
 				}
-				// then sort
+			}
 
+			// sorts all the edges in this node into the correct order. assumes destroyExpiredEdges
+			// was called first, before invoking this function
+			void sortEdges() {
 				std::sort(edges.begin(), edges.end(),
 					[](std::shared_ptr<GraphEdge> a, std::shared_ptr<GraphEdge> b) {
 						if (equals(a->weight, b->weight)) {
@@ -149,6 +150,20 @@ namespace cs6771 {
 				}
 				// clear this->edges which will call destructors on the smart pointers contained
 				edges.clear();
+			}
+
+			// deletes the edge from this node with the given destination value and weight
+			void deleteEdge(const N& to, const E& weight) {
+				for (auto i = edges.begin(); i != edges.end(); ++i) {
+					if (auto sptr = (*i)->destNode.lock()) {
+						if (equals(weight, (*i)->weight) && equals(sptr->value, to)) {
+							// found identical edge, delete and immediately return
+							edges.erase(i);
+							return;
+						}
+					}
+				}
+				// edge not found, nothing happens, no exceptions should be thrown here
 			}
 		};
 
@@ -273,13 +288,24 @@ namespace cs6771 {
 	// deletes node with given value, as well as all edges connected to and from it
 	template <typename N, typename E>
 	void Graph<N, E>::deleteNode(const N& del) noexcept {
-		// @TODO
+		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
+			if (equals((*i)->value, del)) {
+				// found the node - erase it and instantly return
+				nodes.erase(i); // erase will cascade destructors and there shouldn't be any memory leaks
+				return;
+			}
+		}
+		// if we reach here, del wasn't found, nothing happens, this method shouldn't throw any exceptions
 	}
 
-	// deletes an edge between two nodes with a given weight. doesn't throw exceptions
+	// deletes an edge between two nodes with a given weight
 	template <typename N, typename E>
 	void Graph<N, E>::deleteEdge(const N& src, const N& dest, const E& weight) noexcept {
-		// @TODO
+		if (isNode(src) && isNode(dest)) {
+			auto sptrSrc = getNode(src);
+			sptrSrc->deleteEdge(dest, weight);
+		}
+		// otherwise do nothing, this method shouldn't throw any exceptions
 	}
 
 	// checks if a node with the given value already exists
@@ -305,9 +331,12 @@ namespace cs6771 {
 	// prints out all nodes in this graph
 	template <typename N, typename E>
 	void Graph<N, E>::printNodes() {
-		// sort first
+		// firstly, go through every node and delete expired edges from them
+		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
+			(*i)->destroyExpiredEdges();
+		}
+		// then sort
 		sortNodes();
-		//std::cout << "After sorting:" << std::endl;
 		// then print out values
 		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
 			std::cout << (*i)->value << std::endl;
@@ -320,11 +349,13 @@ namespace cs6771 {
 	void Graph<N, E>::printEdges(const N& n) {
 		std::shared_ptr<GraphNode> node = getNode(n); // getNode will throw runtime_error if n not found
 		std::cout << "Edges attached to Node " << n << std::endl;
+		// destroy expired weak_ptrs to edges
+		node->destroyExpiredEdges();
+		// sort all edges on the node
+		node->sortEdges();
 		if (node->edges.size() == 0) { // special case for 0 edges
 			std::cout << "(null)" << std::endl;
 		}
-		// sort all edges on the node
-		node->sortEdges();
 		// then, print out all edges
 		for (auto i = node->edges.begin(); i != node->edges.end(); ++i) {
 			if (auto sptr = (*i)->destNode.lock()) {
