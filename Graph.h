@@ -29,7 +29,6 @@ namespace cs6771 {
 	class NodeIterator;
 
 	// @TODO const correctness for all functions
-	// @TODO copy and MOVE!!! constructors
 	// @TODO go through everything and check every == for equals()
 	// @TODO check all functions and exceptions thrown
 	// Graph class declaration
@@ -470,10 +469,15 @@ namespace cs6771 {
 		bool operator==(const NodeIterator& other) const;
 		bool operator!=(const NodeIterator& other) const { return !operator==(other); }
 
+		// @TODO: copy by value the vector<shared_ptr<GraphNode>> nodes and sort within this iterator
 		NodeIterator(Graph<N, E>* g) : graph(g), index(0) {
-			if (g != nullptr) {
-				// if g isn't null, sort the graph
-				g->sortNodes();
+			if (graph != nullptr) {
+				// if g isn't null
+				if (graph->nodes.size() > 0) { // if there are nodes, sort the graph
+					graph->sortNodes();
+				} else { // there are no nodes, set graph to nullptr to make it equivalent to end()
+					graph = nullptr;
+				}
 			}
 		}
 	
@@ -489,7 +493,6 @@ namespace cs6771 {
 			return graph->nodes[index]->value;
 		}
 		throw std::runtime_error("dereferencing out of bounds NodeIterator");
-		//return NodeIterator<N, E>(nullptr);
 	}
 
 	template <typename N, typename E>
