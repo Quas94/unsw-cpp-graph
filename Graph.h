@@ -14,6 +14,13 @@
 
 namespace cs6771 {
 
+	// templated function to compare for equality of node values and edge weights
+	template <typename T>
+	bool equals(const T& a, const T& b) {
+		return (!(a < b) && !(b < a));
+	}
+
+	// @TODO const correctness for all functions
 	// Graph class declaration
 	template <typename N, typename E>
 	class Graph {
@@ -59,12 +66,22 @@ namespace cs6771 {
 
 		// sort Nodes into correct order
 		// @TODO: implement mutable sort flag to prevent unnecessary sorting
-		void sortNodes();
+		void sortNodes() {
+			std::sort(nodes.begin(), nodes.end(),
+				[](std::shared_ptr<GraphNode> a, std::shared_ptr<GraphNode> b) {
+					int sizeA = a->edges.size();
+					int sizeB = b->edges.size();
+					if (sizeA == sizeB) {
+						return a->value < b->value;
+					}
+					return sizeB < sizeA; // node order is most edges -> least edges
+				});
+		}
 
 		// gets the GraphNode with the given value
 		std::shared_ptr<GraphNode> getNode(const N& n) {
 			for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-				if ((*i)->value == n) {
+				if (equals((*i)->value, n)) {
 					return *i;
 				}
 			}
@@ -95,7 +112,7 @@ namespace cs6771 {
 	template <typename N, typename E>
 	bool Graph<N, E>::isNode(const N& n) {
 		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			if ((*i)->value == n) { // iterator 'i' deferences to a smart pointer
+			if (equals((*i)->value, n)) { // iterator 'i' deferences to a smart pointer
 				return true; // found
 			}
 		}
@@ -107,6 +124,7 @@ namespace cs6771 {
 	void Graph<N, E>::printNodes() {
 		// sort first
 		sortNodes();
+		//std::cout << "After sorting:" << std::endl;
 		// then print out values
 		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
 			std::cout << (*i)->value << std::endl;
@@ -125,7 +143,7 @@ namespace cs6771 {
 		auto i = srcNode->edges.begin();
 		while (i != srcNode->edges.end()) {
 			if (auto sptr = (*i)->destNode.lock()) {
-				if (sptr->value == dest && (*i)->weight == weight) {
+				if (equals(sptr->value, dest) && equals((*i)->weight, weight)) {
 					return false; // identical edge already exists, return false
 				}
 				++i; // increment iterator if the weak_ptr was still valid
@@ -160,22 +178,6 @@ namespace cs6771 {
 				std::cout << sptr->value << " " << (*i)->weight << std::endl;
 			}
 		}
-	}
-
-	// sort comparator function for std::sort on graph nodes
-	// @TODO take into account number of edges, currently only sorts with <
-	// @TODO turn into lambda function?
-	/*
-	bool sortNodesComparator(const Graph<N, E>::GraphNode a, const Graph<N, E>::GraphNode b) {
-		return (a < b);
-	}
-	*/
-
-	// sorts nodes into correct order (number of edges descending order, then < on node value)
-	// @TODO sort properly using sortNodesComparator
-	template <typename N, typename E>
-	void Graph<N, E>::sortNodes() {
-		//std::sort(nodes.begin(), nodes.end(), sortNodesComparator);
 	}
 };
 
