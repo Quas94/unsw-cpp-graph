@@ -14,6 +14,7 @@
 
 namespace cs6771 {
 
+	// @TODO how to not expose this function?
 	// templated function to compare for equality of node values and edge weights
 	template <typename T>
 	bool equals(const T& a, const T& b) {
@@ -92,24 +93,23 @@ namespace cs6771 {
 		// replaces data stored at node with data stored on another node on the graph
 		// first node param is the node that is destroyed. if either node not found, runtime_error thrown
 		// edges of both nodes retained after merge, except edges between the two nodes themselves
-		// @TODO: double check there are no duplicate edges in the merged node
 		void mergeReplace(const N& destroy, const N& second);
 		// deletes node with given value, as well as all edges connected to and from it
 		void deleteNode(const N& del) noexcept;
 		// deletes an edge between two nodes with a given weight. doesn't throw exceptions
 		void deleteEdge(const N& src, const N& dest, const E& weight) noexcept;
-
+		// removes all nodes and edges from the graph
+		void clear() noexcept;
 		// checks if a node already exists
-		bool isNode(const N& n);
+		bool isNode(const N& n) const;
 		// checks if there is an edge from the first node to the second
 		// if either node is not found, std::runtime_error is thrown
-		bool isConnected(const N& a, const N& b);
+		bool isConnected(const N& a, const N& b) const;
 		// prints out all nodes in this graph
 		void printNodes();
 		// prints all edges of the node with the given value, sorted by edge cost incrementing
 		// if edge costs are equivalent, sort by < on dest node's value
 		void printEdges(const N& n);
-
 
 	private:
 		// GraphEdge prototype
@@ -165,7 +165,7 @@ namespace cs6771 {
 			}
 
 			// checks if there is any edge (regardless of weight) to the node with the given value
-			bool hasEdgeTo(const N& to) {
+			bool hasEdgeTo(const N& to) const {
 				for (auto i = edges.begin(); i != edges.end(); ++i) {
 					if (auto sptrDest = (*i)->destNode.lock()) { // if weak ptr is still alive
 						if (equals(sptrDest->value, to)) {
@@ -366,10 +366,16 @@ namespace cs6771 {
 		}
 		// otherwise do nothing, this method shouldn't throw any exceptions
 	}
+		
+	// removes all nodes and edges from the graph
+	template <typename N, typename E>
+	void Graph<N, E>::clear() noexcept {
+		nodes.clear(); // clear will call destructors on the shared_ptrs to GraphNodes and will cascade
+	}
 
 	// checks if a node with the given value already exists
 	template <typename N, typename E>
-	bool Graph<N, E>::isNode(const N& n) {
+	bool Graph<N, E>::isNode(const N& n) const {
 		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
 			if (equals((*i)->value, n)) { // iterator 'i' deferences to a smart pointer
 				return true; // found
@@ -380,7 +386,7 @@ namespace cs6771 {
 
 	// checks if there is an edge from the first node to the second
 	template <typename N, typename E>
-	bool Graph<N, E>::isConnected(const N& a, const N& b) {
+	bool Graph<N, E>::isConnected(const N& a, const N& b) const {
 		auto sptrNodeA = getNode(a);
 		auto sptrNodeB = getNode(b);
 		// if either a or b don't exist, the getNode() function will throw std::runtime_error
