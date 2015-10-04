@@ -11,8 +11,11 @@
 #include <vector>
 #include <memory>
 #include <algorithm>
+#include <iterator>
 
 namespace cs6771 {
+
+	// @TODO make printNodes() and printEdges() const
 
 	// @TODO how to not expose this function?
 	// templated function to compare for equality of node values and edge weights
@@ -20,6 +23,10 @@ namespace cs6771 {
 	bool equals(const T& a, const T& b) {
 		return (!(a < b) && !(b < a));
 	}
+
+	// forward declaration of iterator classes
+	template <typename N, typename E>
+	class NodeIterator;
 
 	// @TODO const correctness for all functions
 	// @TODO copy and MOVE!!! constructors
@@ -29,10 +36,14 @@ namespace cs6771 {
 	template <typename N, typename E>
 	class Graph {
 	public:
+		// iterator is a friend
+		friend class NodeIterator<N, E>;
+
 		// default constructor
 		Graph() {
 			// does nothing
 		}
+
 		// big five
 		// copy constructor
 		Graph(const Graph& from) {
@@ -110,6 +121,10 @@ namespace cs6771 {
 		// prints all edges of the node with the given value, sorted by edge cost incrementing
 		// if edge costs are equivalent, sort by < on dest node's value
 		void printEdges(const N& n);
+		// returns input iterator over the graph
+		NodeIterator<N, E> begin() const;
+		// returns an iterator to the end of collection of Nodes of this graph
+		NodeIterator<N, E> end() const;
 
 	private:
 		// GraphEdge prototype
@@ -427,6 +442,71 @@ namespace cs6771 {
 				std::cout << sptr->value << " " << (*i)->weight << std::endl;
 			}
 		}
+	}
+
+	template <typename N, typename E>
+	NodeIterator<N, E> Graph<N, E>::begin() const {
+		return NodeIterator<N, E>(const_cast<Graph<N, E>*>(this));
+	}
+
+	template <typename N, typename E>
+	NodeIterator<N, E> Graph<N, E>::end() const {
+		return NodeIterator<N, E>(nullptr);
+	}
+
+	// node iterator class
+	template <typename N, typename E>
+	class NodeIterator {
+	public:
+		typedef std::ptrdiff_t 				difference_type;
+		typedef std::input_iterator_tag 	iterator_category;
+		typedef N							value_type;
+		typedef N const*					pointer;
+		typedef const N&					reference;
+
+		reference operator*() const;
+		pointer operator->() const { return &(operator*()); }
+		NodeIterator& operator++();
+		bool operator==(const NodeIterator& other) const;
+		bool operator!=(const NodeIterator& other) const { return !operator==(other); }
+
+		NodeIterator(Graph<N, E>* g) : graph(g), index(0) {
+			if (g != nullptr) {
+				// if g isn't null, sort the graph
+				g->sortNodes();
+			}
+		}
+	
+	private:
+		Graph<N, E>* graph;
+		// the index we're currently at
+		unsigned int index;
+	};
+
+	template <typename N, typename E>
+	const N& NodeIterator<N, E>::operator*() const {
+		if (index < graph->nodes.size()) {
+			return graph->nodes[index]->value;
+		}
+		throw std::runtime_error("dereferencing out of bounds NodeIterator");
+		//return NodeIterator<N, E>(nullptr);
+	}
+
+	template <typename N, typename E>
+	NodeIterator<N, E>& NodeIterator<N, E>::operator++() {
+		++index; // increment index
+		if (index >= graph->nodes.size()) {
+			graph = nullptr; // index reached end, set graph to nullptr
+		}
+		return *this;
+	}
+
+	template <typename N, typename E>
+	bool NodeIterator<N, E>::operator==(const NodeIterator& other) const {
+		if (graph == nullptr && other.graph == nullptr) {
+			return true; // if both nullptr, don't bother comparing index fields
+		}
+		return (graph == other.graph && index == other.index);
 	}
 };
 
