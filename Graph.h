@@ -7,8 +7,6 @@
 #ifndef GRAPH_H_GUARD
 #define GRAPH_H_GUARD
 
-#include <typeinfo>
-
 #include <iostream>
 #include <vector>
 #include <memory>
@@ -24,6 +22,8 @@ namespace cs6771 {
 
 	// @TODO const correctness for all functions
 	// @TODO copy and MOVE!!! constructors
+	// @TODO go through everything and check every == for equals()
+	// @TODO check all functions and exceptions thrown
 	// Graph class declaration
 	template <typename N, typename E>
 	class Graph {
@@ -42,6 +42,10 @@ namespace cs6771 {
 		// prints all edges of the node with the given value, sorted by edge cost incrementing
 		// if edge costs are equivalent, sort by < on dest node's value
 		void printEdges(const N& n);
+
+		// checks if there is an edge from the first node to the second
+		// if either node is not found, std::runtime_error is thrown
+		bool isConnected(const N& a, const N& b);
 
 	private:
 		// GraphEdge prototype
@@ -77,6 +81,18 @@ namespace cs6771 {
 						}
 						return a->weight < b->weight; // edge order is increasing weight
 					});
+			}
+
+			// checks if there is any edge (regardless of weight) to the node with the given value
+			bool hasEdgeTo(const N& to) {
+				for (auto i = edges.begin(); i != edges.end(); ++i) {
+					if (auto sptrDest = (*i)->destNode.lock()) { // if weak ptr is still alive
+						if (equals(sptrDest->value, to)) {
+							return true;
+						}
+					}
+				}
+				return false;
 			}
 		};
 
@@ -206,6 +222,15 @@ namespace cs6771 {
 				std::cout << sptr->value << " " << (*i)->weight << std::endl;
 			}
 		}
+	}
+
+	// checks if there is an edge from the first node to the second
+	template <typename N, typename E>
+	bool Graph<N, E>::isConnected(const N& a, const N& b) {
+		auto sptrNodeA = getNode(a);
+		auto sptrNodeB = getNode(b);
+		// if either a or b don't exist, the getNode() function will throw std::runtime_error
+		return sptrNodeA->hasEdgeTo(b);
 	}
 };
 
