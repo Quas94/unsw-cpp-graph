@@ -7,6 +7,8 @@
 #ifndef GRAPH_H_GUARD
 #define GRAPH_H_GUARD
 
+#include <typeinfo>
+
 #include <iostream>
 #include <vector>
 #include <memory>
@@ -21,6 +23,7 @@ namespace cs6771 {
 	}
 
 	// @TODO const correctness for all functions
+	// @TODO copy and MOVE!!! constructors
 	// Graph class declaration
 	template <typename N, typename E>
 	class Graph {
@@ -51,6 +54,30 @@ namespace cs6771 {
 			// these should be okay with compiler-auto-generated constructors and destructor
 			std::vector<std::shared_ptr<GraphEdge>> edges;
 			N value;
+
+			// sorts all the edges in this node into the correct order
+			void sortEdges() {
+				// first, get rid of all edges that have destNode (weak_ptr) expired
+				auto i = edges.begin();
+				while (i != edges.end()) {
+					// std::cout << typeid(*i).name() << std::endl;
+					if (!((*i)->destNode.lock())) { // weak_ptr expired
+						edges.erase(i);
+					} else {
+						++i;
+					}
+				}
+				// then sort
+
+				std::sort(edges.begin(), edges.end(),
+					[](std::shared_ptr<GraphEdge> a, std::shared_ptr<GraphEdge> b) {
+						if (equals(a->weight, b->weight)) {
+							// can convert destNode without checking because of loop just above
+							return a->destNode.lock()->value < b->destNode.lock()->value;
+						}
+						return a->weight < b->weight; // edge order is increasing weight
+					});
+			}
 		};
 
 		// nested class Edge: contains the N value of the dest node, and the edge weight
@@ -171,7 +198,8 @@ namespace cs6771 {
 		if (node->edges.size() == 0) { // special case for 0 edges
 			std::cout << "(null)" << std::endl;
 		}
-		// @TODO: sort by increasing edge cost, if edge costs equal, sort by < on dest node value
+		// sort all edges on the node
+		node->sortEdges();
 		// then, print out all edges
 		for (auto i = node->edges.begin(); i != node->edges.end(); ++i) {
 			if (auto sptr = (*i)->destNode.lock()) {
