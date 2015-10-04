@@ -105,6 +105,51 @@ namespace cs6771 {
 				}
 				return false;
 			}
+
+			// deletes all edges from this node to the node with the given value
+			// @TODO figure out if shared_ptr<GraphEdge> is leaking anywhere!!!
+			void deleteEdgesTo(const N& to) {
+				auto i = edges.begin();
+				while (i != edges.end()) {
+					bool deleted = false;
+					if (auto sptrDest = (*i)->destNode.lock()) { // if weak ptr is still alive
+						if (equals(sptrDest->value, to)) { // this edge should be deleted
+							deleted = true;
+							edges.erase(i); // will call the smart pointer's destructor
+						}
+					}
+					if (!deleted) {
+						++i;
+					}
+				}
+			}
+
+			// takes all of this Node's edges and gives them to the Node that's supplied (unless duplicate)
+			// assumes that deleteEdgesTo has been called between both of the two nodes
+			void giveEdgesTo(std::shared_ptr<GraphNode> to) {
+				// copy shared_ptr over from this->edges to to->edges
+				for (auto i = edges.begin(); i != edges.end(); ++i) {
+					// check if to->edges already contains a duplicate of this edge
+					bool exists = false;
+					for (auto t = to->edges.begin(); t != to->edges.end(); ++t) {
+						auto ilock = (*i)->destNode.lock();
+						auto tlock = (*t)->destNode.lock();
+						if (!ilock || !tlock) {
+							continue;
+						}
+						// if weight and dest node are both equivalent, identical edge found
+						if (equals((*t)->weight, (*i)->weight) && equals(tlock->value, ilock->value)) {
+							exists = true;
+							break;
+						}
+					}
+					if (!exists) {
+						to->edges.push_back(*i); // copy over shared_ptr<GraphEdge> if no duplicate found
+					}
+				}
+				// clear this->edges which will call destructors on the smart pointers contained
+				edges.clear();
+			}
 		};
 
 		// nested class Edge: contains the N value of the dest node, and the edge weight
@@ -209,7 +254,20 @@ namespace cs6771 {
 	// merges the edges of the two given nodes. first node is destroyed
 	template <typename N, typename E>
 	void Graph<N, E>::mergeReplace(const N& destroy, const N& second) {
-		// @TODO
+		auto sptrDestroy = getNode(destroy);
+		auto sptrSecond = getNode(second);
+		// getNode() will throw std::runtime_error if either of the nodes don't exist
+		// delete all edges from second to destroy and destroy to second
+		sptrSecond->deleteEdgesTo(destroy);
+		sptrDestroy->deleteEdgesTo(second);
+		// take all of 'destroy's edges and give them to 'second'
+		sptrDestroy->giveEdgesTo(sptrSecond);
+		// actually get rid of 'destroy' by removing it from Graph::nodes
+		// std::vector<std::shared_ptr<GraphNode>>::iterator
+		auto pos = std::find(nodes.begin(), nodes.end(), sptrDestroy); // find position of sptrDestroy
+		if (pos != nodes.end()) {
+			nodes.erase(pos); // actually destroy it
+		}
 	}
 
 	// deletes node with given value, as well as all edges connected to and from it
