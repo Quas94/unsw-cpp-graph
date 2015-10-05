@@ -33,7 +33,6 @@ namespace cs6771 {
 	class EdgeIterator;
 
 	// @TODO const correctness for all functions
-	// @TODO go through everything and check every == for equals()
 	// @TODO check all functions and exceptions thrown
 	// Graph class declaration
 	template <typename N, typename E>
@@ -130,7 +129,7 @@ namespace cs6771 {
 		void printNodes() const;
 		// prints all edges of the node with the given value, sorted by edge cost incrementing
 		// if edge costs are equivalent, sort by < on dest node's value
-		void printEdges(const N& n);
+		void printEdges(const N& n) const;
 		// returns input iterator over the graph
 		NodeIterator<N, E> begin() const;
 		// returns an iterator to the end of collection of Nodes of this graph
@@ -187,6 +186,18 @@ namespace cs6771 {
 						++i;
 					}
 				}
+			}
+
+			// counts the number of edges that have a destNode weak_ptr that is still alive
+			// does not modify the Node or any Edges in any way
+			unsigned int countLiveEdges() const {
+				unsigned int count = 0;
+				for (auto i = edges.begin(); i != edges.end(); ++i) {
+					if (!((*i)->destNode.expired())) { // destNode NOT expired
+						++count;
+					}
+				}
+				return count;
 			}
 
 			// sorts all the edges in this node into the correct order. assumes destroyExpiredEdges
@@ -432,20 +443,15 @@ namespace cs6771 {
 	// prints all edges of the node with the given value
 	// @TODO test not found runtime_error
 	template <typename N, typename E>
-	void Graph<N, E>::printEdges(const N& n) {
+	void Graph<N, E>::printEdges(const N& n) const {
 		std::shared_ptr<GraphNode> node = getNode(n); // getNode will throw runtime_error if n not found
 		std::cout << "Edges attached to Node " << n << std::endl;
-		// destroy expired weak_ptrs to edges
-		node->destroyExpiredEdges();
-		// sort all edges on the node
-		node->sortEdges();
-		if (node->edges.size() == 0) { // special case for 0 edges
+
+		if (node->countLiveEdges() == 0) { // special case for 0 non-expired edges
 			std::cout << "(null)" << std::endl;
-		}
-		// then, print out all edges
-		for (auto i = node->edges.begin(); i != node->edges.end(); ++i) {
-			if (auto sptr = (*i)->destNode.lock()) {
-				std::cout << sptr->value << " " << (*i)->weight << std::endl;
+		} else { // print out all edges
+			for (auto i = edgeIteratorBegin(n); i != edgeIteratorEnd(); ++i) {
+				std::cout << (*i).first << " " << (*i).second << std::endl;
 			}
 		}
 	}
@@ -470,7 +476,7 @@ namespace cs6771 {
 		typedef std::ptrdiff_t 				difference_type;
 		typedef std::input_iterator_tag 	iterator_category;
 		typedef N							value_type;
-		typedef N const*					pointer;
+		typedef const N*					pointer;
 		typedef const N&					reference;
 
 		reference operator*() const;
@@ -563,7 +569,7 @@ namespace cs6771 {
 		typedef std::ptrdiff_t 				difference_type;
 		typedef std::input_iterator_tag 	iterator_category;
 		typedef std::pair<N, E>				value_type;
-		typedef std::pair<N, E> const*		pointer;
+		typedef const std::pair<N, E>*		pointer;
 		typedef const std::pair<N, E>&		reference;
 
 		reference operator*() const;
@@ -598,11 +604,6 @@ namespace cs6771 {
 		if (index >= node->edges.size()) {
 			throw std::runtime_error("dereferencing out of bounds EdgeIterator");
 		}
-		/*
-		if (node->edges[index]->destNode.expired()) {
-			throw std::runtime_error("destNode expired, this shouldn't happen");
-		}
-		*/
 		// populate pair with values from current edge
 		deref.first = node->edges[index]->destNode.lock()->value;
 		deref.second = node->edges[index]->weight;
