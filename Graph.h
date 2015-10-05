@@ -15,13 +15,9 @@
 
 namespace cs6771 {
 
-	// @TODO make printNodes() and printEdges() const
-	// @TODO test vector.erase() compatibility (and maybe other STL functions?) with iterators
-
-	// @TODO how to not expose this function?
 	// templated function to compare for equality of node values and edge weights
 	template <typename T>
-	bool equals(const T& a, const T& b) {
+	bool graphTemplateArgsEquals(const T& a, const T& b) {
 		return (!(a < b) && !(b < a));
 	}
 
@@ -32,8 +28,6 @@ namespace cs6771 {
 	template <typename N, typename E>
 	class EdgeIterator;
 
-	// @TODO const correctness for all functions
-	// @TODO check all functions and exceptions thrown
 	// Graph class declaration
 	template <typename N, typename E>
 	class Graph {
@@ -99,8 +93,8 @@ namespace cs6771 {
 
 		// move assignment
 		Graph& operator=(Graph&& from) {
-			nodes = from.nodes;
-			from.nodes.clear();
+			nodes = from.nodes; // copy all the smart pointers over, copy by value
+			from.nodes.clear(); // clear the old ones
 			return *this;
 		}
 
@@ -144,7 +138,6 @@ namespace cs6771 {
 		// collection of smart pointers corresponding to the Nodes in this graph
 		std::vector<std::shared_ptr<GraphNode>> nodes;
 
-		// @TODO figure out where to use smart pointers in the nested classes (and other places?)
 		// inner class Node: contains a list of edges, and the node value itself
 		class GraphNode {
 		public:
@@ -205,7 +198,7 @@ namespace cs6771 {
 			void sortEdges() {
 				std::sort(edges.begin(), edges.end(),
 					[](std::shared_ptr<GraphEdge> a, std::shared_ptr<GraphEdge> b) {
-						if (equals(a->weight, b->weight)) {
+						if (graphTemplateArgsEquals(a->weight, b->weight)) {
 							// can convert destNode without checking because of loop just above
 							return a->destNode.lock()->value < b->destNode.lock()->value;
 						}
@@ -217,7 +210,7 @@ namespace cs6771 {
 			bool hasEdgeTo(const N& to) const {
 				for (auto i = edges.begin(); i != edges.end(); ++i) {
 					if (auto sptrDest = (*i)->destNode.lock()) { // if weak ptr is still alive
-						if (equals(sptrDest->value, to)) {
+						if (graphTemplateArgsEquals(sptrDest->value, to)) {
 							return true;
 						}
 					}
@@ -226,13 +219,12 @@ namespace cs6771 {
 			}
 
 			// deletes all edges from this node to the node with the given value
-			// @TODO figure out if shared_ptr<GraphEdge> is leaking anywhere!!!
 			void deleteEdgesTo(const N& to) {
 				auto i = edges.begin();
 				while (i != edges.end()) {
 					bool deleted = false;
 					if (auto sptrDest = (*i)->destNode.lock()) { // if weak ptr is still alive
-						if (equals(sptrDest->value, to)) { // this edge should be deleted
+						if (graphTemplateArgsEquals(sptrDest->value, to)) { // this edge should be deleted
 							deleted = true;
 							edges.erase(i); // will call the smart pointer's destructor
 						}
@@ -244,20 +236,23 @@ namespace cs6771 {
 			}
 
 			// takes all of this Node's edges and gives them to the Node that's supplied (unless duplicate)
-			// assumes that deleteEdgesTo has been called between both of the two nodes
+			// assumes that deleteEdgesTo has been called between both of the two nodes prior
 			void giveEdgesTo(std::shared_ptr<GraphNode> to) {
 				// copy shared_ptr over from this->edges to to->edges
 				for (auto i = edges.begin(); i != edges.end(); ++i) {
+					auto ilock = (*i)->destNode.lock();
+					if (!ilock) {
+						continue;
+					}
 					// check if to->edges already contains a duplicate of this edge
 					bool exists = false;
 					for (auto t = to->edges.begin(); t != to->edges.end(); ++t) {
-						auto ilock = (*i)->destNode.lock();
 						auto tlock = (*t)->destNode.lock();
-						if (!ilock || !tlock) {
+						if (!tlock) {
 							continue;
 						}
 						// if weight and dest node are both equivalent, identical edge found
-						if (equals((*t)->weight, (*i)->weight) && equals(tlock->value, ilock->value)) {
+						if (graphTemplateArgsEquals((*t)->weight, (*i)->weight) && graphTemplateArgsEquals(tlock->value, ilock->value)) {
 							exists = true;
 							break;
 						}
@@ -274,7 +269,7 @@ namespace cs6771 {
 			void deleteEdge(const N& to, const E& weight) {
 				for (auto i = edges.begin(); i != edges.end(); ++i) {
 					if (auto sptr = (*i)->destNode.lock()) {
-						if (equals(weight, (*i)->weight) && equals(sptr->value, to)) {
+						if (graphTemplateArgsEquals(weight, (*i)->weight) && graphTemplateArgsEquals(sptr->value, to)) {
 							// found identical edge, delete and immediately return
 							edges.erase(i);
 							return;
@@ -297,7 +292,7 @@ namespace cs6771 {
 		// gets the GraphNode with the given value
 		std::shared_ptr<GraphNode> getNode(const N& n) const {
 			for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-				if (equals((*i)->value, n)) {
+				if (graphTemplateArgsEquals((*i)->value, n)) {
 					return *i;
 				}
 			}
@@ -312,7 +307,8 @@ namespace cs6771 {
 		if (!isNode(n)) { // doesn't exist
 			std::shared_ptr<GraphNode> node = std::make_shared<GraphNode>();
 			node->value = n;
-			nodes.push_back(std::move(node));
+			nodes.push_back(node);
+			// don't need std::move, 'node' will automatically be deleted when this function ends
 			return true;
 		}
 		return false; // already exists so false
@@ -326,11 +322,10 @@ namespace cs6771 {
 		// getNode throws std::runtime_error if src or dest aren't found. should bubble up here
 		
 		// first, remove all weak ptrs that are no longer pointing to valid memory
-		// @TODO: possibly add hasEdge method to GraphNode
 		auto i = srcNode->edges.begin();
 		while (i != srcNode->edges.end()) {
 			if (auto sptr = (*i)->destNode.lock()) {
-				if (equals(sptr->value, dest) && equals((*i)->weight, weight)) {
+				if (graphTemplateArgsEquals(sptr->value, dest) && graphTemplateArgsEquals((*i)->weight, weight)) {
 					return false; // identical edge already exists, return false
 				}
 				++i; // increment iterator if the weak_ptr was still valid
@@ -376,16 +371,14 @@ namespace cs6771 {
 		// actually get rid of 'destroy' by removing it from Graph::nodes
 		// std::vector<std::shared_ptr<GraphNode>>::iterator
 		auto pos = std::find(nodes.begin(), nodes.end(), sptrDestroy); // find position of sptrDestroy
-		if (pos != nodes.end()) {
-			nodes.erase(pos); // actually destroy it
-		}
+		nodes.erase(pos); // actually destroy it
 	}
 
 	// deletes node with given value, as well as all edges connected to and from it
 	template <typename N, typename E>
 	void Graph<N, E>::deleteNode(const N& del) noexcept {
 		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			if (equals((*i)->value, del)) {
+			if (graphTemplateArgsEquals((*i)->value, del)) {
 				// found the node - erase it and instantly return
 				nodes.erase(i); // erase will cascade destructors and there shouldn't be any memory leaks
 				return;
@@ -414,7 +407,7 @@ namespace cs6771 {
 	template <typename N, typename E>
 	bool Graph<N, E>::isNode(const N& n) const {
 		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			if (equals((*i)->value, n)) { // iterator 'i' deferences to a smart pointer
+			if (graphTemplateArgsEquals((*i)->value, n)) { // iterator 'i' deferences to a smart pointer
 				return true; // found
 			}
 		}
@@ -441,7 +434,6 @@ namespace cs6771 {
 	}
 
 	// prints all edges of the node with the given value
-	// @TODO test not found runtime_error
 	template <typename N, typename E>
 	void Graph<N, E>::printEdges(const N& n) const {
 		std::shared_ptr<GraphNode> node = getNode(n); // getNode will throw runtime_error if n not found
@@ -469,7 +461,6 @@ namespace cs6771 {
 	}
 
 	// node iterator class
-	// @TODO test pointer -> usage
 	template <typename N, typename E>
 	class NodeIterator {
 	public:
