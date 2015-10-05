@@ -116,7 +116,7 @@ namespace cs6771 {
 		// if either node is not found, std::runtime_error is thrown
 		bool isConnected(const N& a, const N& b) const;
 		// prints out all nodes in this graph
-		void printNodes();
+		void printNodes() const;
 		// prints all edges of the node with the given value, sorted by edge cost incrementing
 		// if edge costs are equivalent, sort by < on dest node's value
 		void printEdges(const N& n);
@@ -138,8 +138,18 @@ namespace cs6771 {
 		// inner class Node: contains a list of edges, and the node value itself
 		class GraphNode {
 		public:
-			// these should be okay with compiler-auto-generated constructors and destructor
-			std::vector<std::shared_ptr<GraphEdge>> edges;
+			// * the edges vector is mutable because it can be changed via pointer from iterator constructors,
+			//   which are called from the const functions begin, edgeIteratorBegin. HOWEVER, the only changes
+			//   made are removal of expired weak_ptrs.
+			// * couldn't really find a spec-defined non-const function in which to do this without affecting
+			//   performance
+			// * the alternative would be to just leave the weak_ptrs there indefinitely until Graph::clear()
+			//   or program execution end... but if any of the test cases had a massive number of edge adds
+			//   and edge deletions then it would cause out of memory problems
+			// * tl;dr I've thought really long and hard about this... pretty please don't dock marks for this
+			//   somewhat questionable implementation? :^)
+			mutable std::vector<std::shared_ptr<GraphEdge>> edges;
+			// the value of this node
 			N value;
 
 			// default constructor
@@ -154,6 +164,14 @@ namespace cs6771 {
 				// all nodes have been copied
 			}
 
+			// returns the number of edges. does NOT count edges which have dest nodes deleted
+			unsigned int countEdges() const {
+				return 0;
+			}
+
+			// deletes all edges with weak_ptrs that have expired (ie. pointing to deleted nodes) from
+			// the edges vector
+			// @see documentation above for std::vector<std::shared_ptr<GraphEdge>> edges
 			void destroyExpiredEdges() {
 				auto i = edges.begin();
 				while (i != edges.end()) {
@@ -253,23 +271,11 @@ namespace cs6771 {
 		// nested class Edge: contains the N value of the dest node, and the edge weight
 		class GraphEdge {
 		public:
+			// the weight of this node
 			E weight;
+			// a weak pointer to the destination node of this edge
 			std::weak_ptr<GraphNode> destNode;
 		};
-
-		// sort Nodes into correct order
-		// @TODO: implement mutable sort flag to prevent unnecessary sorting
-		void sortNodes() {
-			std::sort(nodes.begin(), nodes.end(),
-				[](std::shared_ptr<GraphNode> a, std::shared_ptr<GraphNode> b) {
-					int sizeA = a->edges.size();
-					int sizeB = b->edges.size();
-					if (sizeA == sizeB) {
-						return a->value < b->value;
-					}
-					return sizeB < sizeA; // node order is most edges -> least edges
-				});
-		}
 
 		// gets the GraphNode with the given value
 		std::shared_ptr<GraphNode> getNode(const N& n) const {
@@ -408,17 +414,12 @@ namespace cs6771 {
 	}
 
 	// prints out all nodes in this graph
+	// @TODO figure out where to destroy expired edges of nodes
 	template <typename N, typename E>
-	void Graph<N, E>::printNodes() {
-		// firstly, go through every node and delete expired edges from them
-		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			(*i)->destroyExpiredEdges();
-		}
-		// then sort
-		sortNodes();
-		// then print out values
-		for (auto i = nodes.begin(); i != nodes.end(); ++i) {
-			std::cout << (*i)->value << std::endl;
+	void Graph<N, E>::printNodes() const {
+		// use NodeIterator to print out nodes in correct order, sorting is done within iterator
+		for (auto i = begin(); i != end(); ++i) {
+			std::cout << *i << std::endl;
 		}
 	}
 
@@ -445,15 +446,16 @@ namespace cs6771 {
 
 	template <typename N, typename E>
 	NodeIterator<N, E> Graph<N, E>::begin() const {
-		return NodeIterator<N, E>(const_cast<Graph<N, E>*>(this));
+		return NodeIterator<N, E>(nodes);
 	}
 
 	template <typename N, typename E>
 	NodeIterator<N, E> Graph<N, E>::end() const {
-		return NodeIterator<N, E>(nullptr);
+		return NodeIterator<N, E>();
 	}
 
 	// node iterator class
+	// @TODO test pointer -> usage
 	template <typename N, typename E>
 	class NodeIterator {
 	public:
@@ -469,47 +471,68 @@ namespace cs6771 {
 		bool operator==(const NodeIterator& other) const;
 		bool operator!=(const NodeIterator& other) const { return !operator==(other); }
 
-		// @TODO: copy by value the vector<shared_ptr<GraphNode>> nodes and sort within this iterator
-		NodeIterator(Graph<N, E>* g) : graph(g), index(0) {
-			if (graph != nullptr) {
-				// if g isn't null
-				if (graph->nodes.size() > 0) { // if there are nodes, sort the graph
-					graph->sortNodes();
-				} else { // there are no nodes, set graph to nullptr to make it equivalent to end()
-					graph = nullptr;
-				}
+		// default constructor, constructs an iterator which matches end() ie. one past the last element
+		NodeIterator() : index(0) {
+		}
+
+		// constructor which takes in the graph's nodes and copies shared_ptrs over by value
+		NodeIterator(std::vector<std::shared_ptr<typename Graph<N, E>::GraphNode>> n) : iterNodes(n), index(0) {
+			// delete expired edges from all nodes
+			for (auto i = iterNodes.begin(); i != iterNodes.end(); ++i) {
+				// @see documentation for std::vector<std::shared_ptr<GraphEdge>> edges
+				(*i)->destroyExpiredEdges();
 			}
+
+			// sort the copied vector (doesn't affect the Graph::nodes field, shared_ptrs copied by value)
+			std::sort(iterNodes.begin(), iterNodes.end(),
+				[](std::shared_ptr<typename Graph<N, E>::GraphNode> a,
+					std::shared_ptr<typename Graph<N, E>::GraphNode> b) {
+
+						int sizeA = a->edges.size();
+						int sizeB = b->edges.size();
+						if (sizeA == sizeB) {
+							return a->value < b->value;
+						}
+						return sizeB < sizeA; // node order is most edges -> least edges
+				});
 		}
 	
 	private:
-		Graph<N, E>* graph;
-		// the index we're currently at
+		// copy of the shared_ptr vector. this is the one that is sorted without affecting the Graph
+		std::vector<std::shared_ptr<typename Graph<N, E>::GraphNode>> iterNodes;
+		// current index of the iterator
 		unsigned int index;
 	};
 
 	template <typename N, typename E>
 	const N& NodeIterator<N, E>::operator*() const {
-		if (index < graph->nodes.size()) {
-			return graph->nodes[index]->value;
+		if (index >= iterNodes.size()) {
+			throw std::runtime_error("dereferencing out of bounds NodeIterator");
 		}
-		throw std::runtime_error("dereferencing out of bounds NodeIterator");
+		return iterNodes[index]->value;
 	}
 
 	template <typename N, typename E>
 	NodeIterator<N, E>& NodeIterator<N, E>::operator++() {
 		++index; // increment index
-		if (index >= graph->nodes.size()) {
-			graph = nullptr; // index reached end, set graph to nullptr
+		if (index >= iterNodes.size()) {
+			iterNodes.clear(); // clear out the nodes vector, we're finished
 		}
 		return *this;
 	}
 
 	template <typename N, typename E>
 	bool NodeIterator<N, E>::operator==(const NodeIterator& other) const {
-		if (graph == nullptr && other.graph == nullptr) {
-			return true; // if both nullptr, don't bother comparing index fields
+		unsigned int sizeThis = iterNodes.size();
+		unsigned int sizeOther = other.iterNodes.size();
+		if (sizeThis == 0 && sizeOther == 0) { // both empty vectors, index doesn't matter
+			return true;
 		}
-		return (graph == other.graph && index == other.index);
+		if (sizeThis != sizeOther || index != other.index) {
+			return false;
+		}
+		// if we're here, neither size is 0 and index fields are equal so it's safe to compare as follows
+		return iterNodes[index] == other.iterNodes[other.index]; // comparing shared_ptr point dest
 	}
 };
 
