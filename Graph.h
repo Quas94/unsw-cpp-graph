@@ -16,6 +16,7 @@
 namespace cs6771 {
 
 	// @TODO make printNodes() and printEdges() const
+	// @TODO test vector.erase() compatibility (and maybe other STL functions?) with iterators
 
 	// @TODO how to not expose this function?
 	// templated function to compare for equality of node values and edge weights
@@ -24,9 +25,12 @@ namespace cs6771 {
 		return (!(a < b) && !(b < a));
 	}
 
-	// forward declaration of iterator classes
+	// forward declaration of NodeIterator class
 	template <typename N, typename E>
 	class NodeIterator;
+	// forward declaration of EdgeIterator class
+	template <typename N, typename E>
+	class EdgeIterator;
 
 	// @TODO const correctness for all functions
 	// @TODO go through everything and check every == for equals()
@@ -34,9 +38,16 @@ namespace cs6771 {
 	// Graph class declaration
 	template <typename N, typename E>
 	class Graph {
+	private:
+		// GraphEdge prototype
+		class GraphEdge;
+		// GraphNode prototype
+		class GraphNode;
+
 	public:
-		// iterator is a friend
+		// both iterators are friends
 		friend class NodeIterator<N, E>;
+		friend class EdgeIterator<N, E>;
 
 		// default constructor
 		Graph() {
@@ -124,12 +135,12 @@ namespace cs6771 {
 		NodeIterator<N, E> begin() const;
 		// returns an iterator to the end of collection of Nodes of this graph
 		NodeIterator<N, E> end() const;
+		// returns an iterator that iterates over the edges connected to the node with the given value
+		EdgeIterator<N, E> edgeIteratorBegin(const N& n) const;
+		// returns an iterator to the end of a collection of edges
+		EdgeIterator<N, E> edgeIteratorEnd() const;
 
 	private:
-		// GraphEdge prototype
-		class GraphEdge;
-		// GraphNode prototype
-		class GraphNode;
 
 		// collection of smart pointers corresponding to the Nodes in this graph
 		std::vector<std::shared_ptr<GraphNode>> nodes;
@@ -162,11 +173,6 @@ namespace cs6771 {
 				value = from.value; // copy value field
 				// do NOT copy edges in here, will be handled in the Graph copy constructor after
 				// all nodes have been copied
-			}
-
-			// returns the number of edges. does NOT count edges which have dest nodes deleted
-			unsigned int countEdges() const {
-				return 0;
 			}
 
 			// deletes all edges with weak_ptrs that have expired (ie. pointing to deleted nodes) from
@@ -414,10 +420,10 @@ namespace cs6771 {
 	}
 
 	// prints out all nodes in this graph
-	// @TODO figure out where to destroy expired edges of nodes
 	template <typename N, typename E>
 	void Graph<N, E>::printNodes() const {
-		// use NodeIterator to print out nodes in correct order, sorting is done within iterator
+		// use NodeIterator to print out nodes in correct order, sorting is done within iterator ctor
+		// expired edges will be deleted in NodeIterator::ctor before the sorting
 		for (auto i = begin(); i != end(); ++i) {
 			std::cout << *i << std::endl;
 		}
@@ -444,11 +450,13 @@ namespace cs6771 {
 		}
 	}
 
+	// returns input iterator over the graph
 	template <typename N, typename E>
 	NodeIterator<N, E> Graph<N, E>::begin() const {
 		return NodeIterator<N, E>(nodes);
 	}
 
+	// returns an iterator to the end of collection of Nodes of this graph
 	template <typename N, typename E>
 	NodeIterator<N, E> Graph<N, E>::end() const {
 		return NodeIterator<N, E>();
@@ -533,6 +541,95 @@ namespace cs6771 {
 		}
 		// if we're here, neither size is 0 and index fields are equal so it's safe to compare as follows
 		return iterNodes[index] == other.iterNodes[other.index]; // comparing shared_ptr point dest
+	}
+
+	// returns an iterator that iterates over the edges connected to the node with the given value
+	template <typename N, typename E>
+	EdgeIterator<N, E> Graph<N, E>::edgeIteratorBegin(const N& n) const {
+		auto sptr = getNode(n);
+		// getNode will throw std::runtime_error if node with value n isn't found
+		return EdgeIterator<N, E>(sptr);
+	}
+
+	// returns an iterator to the end of a collection of edges
+	template <typename N, typename E>
+	EdgeIterator<N, E> Graph<N, E>::edgeIteratorEnd() const {
+		return EdgeIterator<N, E>(std::shared_ptr<typename Graph<N, E>::GraphNode>());
+	}
+
+	template <typename N, typename E>
+	class EdgeIterator {
+	public:
+		typedef std::ptrdiff_t 				difference_type;
+		typedef std::input_iterator_tag 	iterator_category;
+		typedef std::pair<N, E>				value_type;
+		typedef std::pair<N, E> const*		pointer;
+		typedef const std::pair<N, E>&		reference;
+
+		reference operator*() const;
+		pointer operator->() const { return &(operator*()); }
+		EdgeIterator& operator++();
+		bool operator==(const EdgeIterator& other) const;
+		bool operator!=(const EdgeIterator& other) const { return !operator==(other); }
+
+		// default constructor, constructs an iterator which matches end() ie. one past the last element
+		EdgeIterator(std::shared_ptr<typename Graph<N, E>::GraphNode> n) : node(n), index(0) {
+			if (node) { // if not nullptr (which is the case for end())
+				// destroy expired edges on the node
+				node->destroyExpiredEdges();
+				if (node->edges.size() > 0) { // if the node has still-alive edges
+					node->sortEdges(); // sort them
+				} else { // this node has no live edges, so set to null to denote equal to end()
+					node = std::shared_ptr<typename Graph<N, E>::GraphNode>();
+				}
+			}
+		}
+	private:
+		// the node that this iterator is iterating over
+		std::shared_ptr<typename Graph<N, E>::GraphNode> node;
+		// the edge index that this iterator is currently at
+		unsigned int index;
+		// the std::pair that is returned when this iterator is dereferenced
+		mutable std::pair<N, E> deref;
+	};
+
+	template <typename N, typename E>
+	const std::pair<N, E>& EdgeIterator<N, E>::operator*() const {
+		if (index >= node->edges.size()) {
+			throw std::runtime_error("dereferencing out of bounds EdgeIterator");
+		}
+		/*
+		if (node->edges[index]->destNode.expired()) {
+			throw std::runtime_error("destNode expired, this shouldn't happen");
+		}
+		*/
+		// populate pair with values from current edge
+		deref.first = node->edges[index]->destNode.lock()->value;
+		deref.second = node->edges[index]->weight;
+		// return the pair
+		return deref;
+	}
+
+	template <typename N, typename E>
+	EdgeIterator<N, E>& EdgeIterator<N, E>::operator++() {
+		++index;
+		if (node) { // if shared_ptr node isn't already null
+			if (index >= node->edges.size()) { // if we've reached end
+				node = std::shared_ptr<typename Graph<N, E>::GraphNode>();
+			}
+		}
+		return *this;
+	}
+
+	template <typename N, typename E>
+	bool EdgeIterator<N, E>::operator==(const EdgeIterator& other) const {
+		if (!node && !other.node) {
+			return true;
+		}
+		if (index != other.index || node != other.node) {
+			return false;
+		}
+		return node->edges[index] == other.node->edges[index];
 	}
 };
 
